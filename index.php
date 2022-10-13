@@ -76,20 +76,18 @@ class Scraping {
         $data = $this->createDom($this->base_url . $link);
         $finder = $data->data;
         $header = $finder->query("//h1[1]/text()[1]");
-        $course_name = $header[0]->nodeValue;
+        $course_name = @$header[0]->nodeValue;
         $instructor = $finder->query("//h3[1]/text()[1]");
         $instructor_name = $instructor[0]->nodeValue;
         $course_description_one = $finder->query("//div[@class='content-inner']/p[1]/text()[1]");
         $course_description_two = $finder->query("//div[@class='content-inner']/p[2]/text()[1]");
-        $first_content = $course_description_one[0]->nodeValue;
-        if($course_description_two[0] == null) $second_content = '';
-        else $second_content = $course_description_two[0]->nodeValue;
+        $first_content = @$course_description_one[0]->nodeValue;
+        $second_content = @$course_description_two[0]->nodeValue;
         $final_content = $first_content . $second_content;
         $enrolled = $finder->query("//div[@class='rc-ProductMetrics']/div/span/strong/span/text()");
-        $enrolled_value = str_replace(',', '', $enrolled[0]->nodeValue);
+        $enrolled_value = str_replace(',', '', @$enrolled[0]->nodeValue);
         $rating = $finder->query("//div[@class='_wmgtrl9 m-r-1s color-white']/span/span/text()");
-        if($rating[0] == null) $rating_value = '';
-        else $rating_value = str_replace(' ratings', '', $rating[0]->nodeValue);
+        $rating_value = str_replace(' ratings', '', @$rating[0]->nodeValue);
         $rating_value = str_replace(',', '', $rating_value);
         return [$category_name, $course_name, $instructor_name,$final_content,$enrolled_value,$rating_value];
     }
@@ -152,6 +150,9 @@ class ClientSide {
                 <input type="submit">
             </form>
         </div>
+        <div style="position: absolute; left: 20; bottom: 10;">
+            <a href="https://raw.githubusercontent.com/lord-zeus/PHPScrapertoCSV/master/index.php">Source Code</a>
+        </div>
         </body>
         </html>
         <?php
@@ -166,13 +167,13 @@ class ClientSide {
             $this->webUser();
             echo( "<div style='display:flex; color: red; justify-content: center'>Error! You didn't enter the Category Name.</div>");
         } else {
-            $category_name = $_POST['category_name'];
+            $category_name = preg_replace("/\s+/", "-", trim(strtolower($_POST['category_name'])));
             $data = $this->csvGenerator->generateCSV($category_name);
             $this->webUser();
             if($data->error){
                 echo( "<div style='display:flex; color: red; justify-content: center'>Error! {$data->message}.</div>");
             }
-            else echo( "<div style='display:flex; justify-content: center'><a href='{$category_name}.csv'>{$category_name}</a></div>");
+            else echo( "<div style='display:flex; justify-content: center'><a href='{$category_name}.csv'>Download CSV ({$category_name})</a></div>");
 
         }
     }
