@@ -2,20 +2,40 @@
 
 /**
  *
+ * Data Class for details and Error
+ */
+class Result {
+    public bool $error;
+    public string $message;
+    public mixed $data;
+
+    public function __construct($error, $data = NULL, $message = ""){
+        $this->error = $error;
+        $this->data = $data;
+        $this->message = $message;
+    }
+}
+
+/**
+ *
  * Class For Crawling the Websites
  */
-//$scraping = new Scraping();
-//$value = $scraping->getCategoryCourses('business');
-//var_dump($value);
-//return '0k';
 class Scraping {
-    public string $base_url;
+    private string $base_url;
     public function __construct(){
         $this->base_url = "https://www.coursera.org";
     }
 
+    /**
+     * @param $category_name
+     * @return Result
+     */
     public function getCategoryCourses($category_name){
-        $finder = $this->createDom($this->base_url . '/browse/'. $category_name);
+        $result = $this->createDom($this->base_url . '/browse/'. $category_name);
+        if($result->error){
+            return $result;
+        }
+        $finder = $result->data;
         $classname = 'rc-BrowseProductCard';
         $nodes = $finder->query("//*[contains(@class, '$classname')]");
         $csv_values = array();
@@ -24,31 +44,37 @@ class Scraping {
             $link = $link_val[0]->getAttribute('href');
             $value = $this->grabCourseDetails($link, $category_name);
             array_push($csv_values, $value);
-           if($k == 1) {
-               break;
-           }
         }
-//        var_dump( $csv_values);
-        return $csv_values;
+        $result->data = $csv_values;
+        return $result;
     }
 
-
-    public function createDom($link){
+    /**
+     * @param $link
+     * @return Result
+     */
+    private function createDom($link){
 
         libxml_use_internal_errors(true);
-        try{
-            $html = file_get_contents($link);
-        }catch (Exception $exception){
-            echo('Sorry Category Not Found Please Try Some Other ex Business');
+        $html = @file_get_contents($link);
+
+        if(!$html){
+            $message = 'Sorry Category Not Found Please Try Some Other ex Business';
+            return new Result(true, NULL, $message);
         }
-        if(!$html)die(404);
         $DOM = new DOMDocument();
         $DOM->loadHTML($html);
-        return new DomXPath($DOM);
+        return new Result(false, new DomXPath($DOM));
     }
 
-    public function grabCourseDetails($link, $category_name){
-        $finder = $this->createDom($this->base_url . $link);
+    /**
+     * @param $link
+     * @param $category_name
+     * @return array
+     */
+    private function grabCourseDetails($link, $category_name){
+        $data = $this->createDom($this->base_url . $link);
+        $finder = $data->data;
         $header = $finder->query("//h1[1]/text()[1]");
         $course_name = $header[0]->nodeValue;
         $instructor = $finder->query("//h3[1]/text()[1]");
@@ -80,33 +106,47 @@ class CSVGenerator {
         $this->scraping = $scraping;
     }
 
+    /**
+     * @param $category
+     * @return Result
+     */
     public function generateCSV($category){
-        $data = $this->scraping->getCategoryCourses($category);
-//        header('Content-Type: text/csv');
-//        header('Content-Disposition: attachment; filename="work.csv"');
+        $result = $this->scraping->getCategoryCourses($category);
 
-        array_unshift($data, array('Category Name', 'Course Name', 'First Instructor Name', 'Course Description', '# of Students Enrolled', '# of Ratings'));
+        if ($result->error) {
+            return $result;
+        }
 
-        $fp = fopen("courses.csv", "w");
-        foreach ($data as $line) {
+        array_unshift($result->data, array('Category Name', 'Course Name', 'First Instructor Name', 'Course Description', '# of Students Enrolled', '# of Ratings'));
+
+        $fp = fopen("{$category}.csv", "w");
+        foreach ($result->data as $line) {
             fputcsv($fp, $line, ',');
         }
         fclose($fp);
-        return 'done';
+        return $result;
     }
 }
 
+/**
+ *
+ * Class for user User interface
+ */
 class ClientSide {
     public CSVGenerator $csvGenerator;
     public function __construct(CSVGenerator $csvGenerator){
         $this->csvGenerator = $csvGenerator;
     }
 
+    /**
+     * @return void
+     * User Interface
+     */
     public function webUser(){
         ?>
         <html>
         <body>
-        <div align="center">
+        <div align="center" style="margin-bottom: 50px; margin-top: 45vh">
             <form action="" method="POST">
                 <b>Category Name:</b><input type="text" name="category_name"><br>
                 <input type="submit">
@@ -117,46 +157,29 @@ class ClientSide {
         <?php
     }
 
+    /**
+     * @return void
+     * Form
+     */
     public function submitForm(){
         if (empty($_POST["category_name"])) {
-            $errMsg = "Error! You didn't enter the Category Name.";
-            echo $errMsg;
             $this->webUser();
+            echo( "<div style='display:flex; color: red; justify-content: center'>Error! You didn't enter the Category Name.</div>");
         } else {
             $category_name = $_POST['category_name'];
-            $this->csvGenerator->generateCSV($category_name);
-            $this->fileDownload('/courses.csv');
-//            echo readfile("courses.csv");
-            echo "<a href='/courses.csv'>$category_name</a>";
+            $data = $this->csvGenerator->generateCSV($category_name);
             $this->webUser();
+            if($data->error){
+                echo( "<div style='display:flex; color: red; justify-content: center'>Error! {$data->message}.</div>");
+            }
+            else echo( "<div style='display:flex; justify-content: center'><a href='{$category_name}.csv'>{$category_name}</a></div>");
+
         }
-    }
-
-    public function fileDownload($filename){
-
-//Define header information
-        header('Content-Description: File Transfer');
-        header('Content-Type: application/octet-stream');
-        header("Cache-Control: no-cache, must-revalidate");
-        header("Expires: 0");
-        header('Content-Disposition: attachment; filename="'.basename($filename).'"');
-        header('Content-Length: ' . filesize($filename));
-        header('Pragma: public');
-
-//Clear system output buffer
-        flush();
-
-//Read the size of the file
-        readfile($filename);
-
-//Terminate from the script
-        die();
-
     }
 }
 
 $client = new ClientSide(new CSVGenerator(new Scraping()));
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    return $client->submitForm();
+    $client->submitForm();
 }
-else return $client->webUser();
+else $client->webUser();
