@@ -4,6 +4,10 @@
  *
  * Class For Crawling the Websites
  */
+//$scraping = new Scraping();
+//$value = $scraping->getCategoryCourses('business');
+//var_dump($value);
+//return '0k';
 class Scraping {
     public string $base_url;
     public function __construct(){
@@ -14,25 +18,31 @@ class Scraping {
         $finder = $this->createDom($this->base_url . '/browse/'. $category_name);
         $classname = 'rc-BrowseProductCard';
         $nodes = $finder->query("//*[contains(@class, '$classname')]");
-
         $csv_values = array();
         foreach ($nodes as $k => $node) {
             $link_val = $node->getElementsByTagName('a');
             $link = $link_val[0]->getAttribute('href');
             $value = $this->grabCourseDetails($link, $category_name);
             array_push($csv_values, $value);
-           if($k == 4) {
+           if($k == 1) {
                break;
            }
         }
-        var_dump( $csv_values);
+//        var_dump( $csv_values);
         return $csv_values;
     }
 
+
     public function createDom($link){
-        $html = file_get_contents($link);
-        $DOM = new DOMDocument();
+
         libxml_use_internal_errors(true);
+        try{
+            $html = file_get_contents($link);
+        }catch (Exception $exception){
+            echo('Sorry Category Not Found Please Try Some Other ex Business');
+        }
+        if(!$html)die(404);
+        $DOM = new DOMDocument();
         $DOM->loadHTML($html);
         return new DomXPath($DOM);
     }
@@ -72,18 +82,17 @@ class CSVGenerator {
 
     public function generateCSV($category){
         $data = $this->scraping->getCategoryCourses($category);
-        var_dump($data);
-        header('Content-Type: text/csv');
-        header('Content-Disposition: attachment; filename="work.csv"');
+//        header('Content-Type: text/csv');
+//        header('Content-Disposition: attachment; filename="work.csv"');
 
         array_unshift($data, array('Category Name', 'Course Name', 'First Instructor Name', 'Course Description', '# of Students Enrolled', '# of Ratings'));
 
-        $fp = fopen("work.csv", "w");
+        $fp = fopen("courses.csv", "w");
         foreach ($data as $line) {
             fputcsv($fp, $line, ',');
         }
         fclose($fp);
-        return $fp;
+        return 'done';
     }
 }
 
@@ -112,11 +121,37 @@ class ClientSide {
         if (empty($_POST["category_name"])) {
             $errMsg = "Error! You didn't enter the Category Name.";
             echo $errMsg;
-            return $this->webUser();
+            $this->webUser();
         } else {
             $category_name = $_POST['category_name'];
+            $this->csvGenerator->generateCSV($category_name);
+            $this->fileDownload('/courses.csv');
+//            echo readfile("courses.csv");
+            echo "<a href='/courses.csv'>$category_name</a>";
+            $this->webUser();
         }
-        return $this->csvGenerator->generateCSV($category_name);
+    }
+
+    public function fileDownload($filename){
+
+//Define header information
+        header('Content-Description: File Transfer');
+        header('Content-Type: application/octet-stream');
+        header("Cache-Control: no-cache, must-revalidate");
+        header("Expires: 0");
+        header('Content-Disposition: attachment; filename="'.basename($filename).'"');
+        header('Content-Length: ' . filesize($filename));
+        header('Pragma: public');
+
+//Clear system output buffer
+        flush();
+
+//Read the size of the file
+        readfile($filename);
+
+//Terminate from the script
+        die();
+
     }
 }
 
