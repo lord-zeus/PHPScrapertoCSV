@@ -7,7 +7,7 @@
 class Result {
     public bool $error;
     public string $message;
-    public mixed $data;
+    public $data;
 
     public function __construct($error, $data = NULL, $message = ""){
         $this->error = $error;
